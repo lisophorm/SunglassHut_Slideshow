@@ -1,0 +1,635 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:WindowedApplication xmlns:fx="http://ns.adobe.com/mxml/2009" 
+					   xmlns:s="library://ns.adobe.com/flex/spark" 
+					   xmlns:mx="library://ns.adobe.com/flex/mx" scaleX="1" scaleY="0.9" creationComplete="windowedapplication1_creationCompleteHandler(event)" applicationComplete="windowedapplication1_applicationCompleteHandler(event)" addedToStage="windowedapplication1_addedToStageHandler(event)" closing="windowedapplication1_closingHandler(event)" width="1200" height="650"
+					   alwaysInFront="false"
+					   >
+	
+	<fx:Script>
+		<![CDATA[
+			import com.adobe.air.filesystem.FileMonitor;
+			import com.adobe.air.filesystem.events.FileMonitorEvent;
+			import com.alfo.utils.PictureWatcher;
+			import com.alfo.utils.DelayedExecution;
+			
+			import mx.events.FlexEvent;
+			
+			import Views.CameraWindow;
+			
+			import model.Config;
+			
+			
+			
+			
+			private var prefs:Config;
+			private var photoShopWatch:PictureWatcher;
+			private var oldList:Array=new Array();
+			private var newList:Array=new Array();
+			private var folderFile:File;
+			private var pushFolder:File;
+			private var currentPhoto:String="";
+			private var lastPhoto:String;
+			
+			private var prefsFile:File;
+			
+			private var dirList;
+			
+			private var serverSocket:ServerSocket;
+			private var clientSocket:Socket;
+			
+			private var currentBckg:String="background_1.jpg";
+			
+			private var CMDnativeProcessInfo:NativeProcessStartupInfo;
+			private var CMDprocess:NativeProcess;
+			
+			private var cameraWindow:CameraWindow;
+			
+			private var monitor:FileMonitor=new FileMonitor();
+			
+			private var oldDirContents:Array;
+			private var currentDirContents:Array;
+			private var newFiles:Array;
+			
+			private var file:File;
+			
+			protected function windowedapplication1_addedToStageHandler(event:Event):void
+			{
+				
+				
+				prefs= new Config();
+				folderWatchDir.text=prefs.watchFolder;
+				setFileMonitor(folderWatchDir.text);
+
+			}
+			
+			protected function setFileMonitor(theFile:String) {
+				
+				file = File.applicationStorageDirectory.resolvePath(theFile);
+				trace("setting monitor to:"+file.nativePath);
+				
+				oldDirContents=file.getDirectoryListing();
+				
+				for (var i=0;i<oldDirContents.length;i++) {
+					var curr:File=oldDirContents[i] as File;
+					oldDirContents[i]=curr.nativePath;
+				}
+					
+					monitor.addEventListener(FileMonitorEvent.CHANGE, onFileChange);
+					monitor.addEventListener(FileMonitorEvent.MOVE, onFileMove);
+					monitor.addEventListener(FileMonitorEvent.CREATE, onFileCreate);
+				
+				
+				monitor.file = file;
+				monitor.watch();
+			}
+			
+			private function onFileChange(e:FileMonitorEvent):void
+			{
+				trace("file was changed"+e.file.nativePath);
+				var currentString:String;
+				file = File.applicationStorageDirectory.resolvePath(folderWatchDir.text);
+				currentDirContents=file.getDirectoryListing();
+				for (var i=0;i<currentDirContents.length;i++) {
+					var curr:File=currentDirContents[i] as File;
+					currentDirContents[i]=curr.nativePath;
+				}
+				newFiles=new Array();
+				var i : int;
+				trace("old dire length:"+oldDirContents.length);
+				trace("new dire length:"+currentDirContents.length);
+				for (i = 0; i < currentDirContents.length; i++) {
+					//&& currentDirContents[i].indexOf(".jpg")!=-1
+					if (oldDirContents.indexOf(currentDirContents[i]) == -1 && currentDirContents[i].indexOf(".jpg")!=-1) {
+						trace("found new:"+currentDirContents[i]);
+						newFiles.push(currentDirContents[i]);
+					}
+				}
+				trace(newFiles);
+				if(newFiles.length>0) {
+					new DelayedExecution(3000,this,procopio);
+				}
+			}
+			
+			private function onFileMove(e:FileMonitorEvent):void
+			{
+				trace("file was moved"+e.file.nativePath);    
+			}
+			
+			private function onFileCreate(e:FileMonitorEvent):void
+			{
+				trace("file was created"+e.file.nativePath);
+			}
+			
+			/*private function photoComplete(e:WatchEvent) {
+				writeLog("skyphotos directory evt type"+e.notificationType+" file:"+e.nativepath);
+				new DelayedExecution(3000,this,procopio);
+			}*/
+			private function showAlert(msg:String) {
+				writeLog("alert:"+msg);
+				/*alertBox= new pleaseWait();
+				alertBox.message="Vafangulo a chi ti e muorto";
+				PopUpManager.addPopUp(alertBox,this,true);
+				PopUpManager.centerPopUp(alertBox);*/
+			}
+			private function procopio() {
+				
+				this.stage.nativeWindow.activate();
+
+				cameraWindow.showNewPic(newFiles[0]);
+
+				trace("call showNrePic");
+				
+			}
+			
+			protected function selectWatch(e:Event=null) {
+				folderFile=new File();
+				folderFile.addEventListener(Event.SELECT,watch_select);
+				folderFile.browseForDirectory("Please select watch directory ");
+			}
+			protected function selectPush(e:Event=null) {
+				pushFolder=new File();
+				pushFolder.addEventListener(Event.SELECT,push_select);
+				pushFolder.browseForDirectory("Please select watch directory ");
+			}
+			
+			protected function selectEXE(e:Event=null) {
+				var filters:Array=new Array();
+				filters.push(new FileFilter( "Executable Files", "*.exe" ));
+				folderFile=new File();
+				folderFile.addEventListener(Event.SELECT,exe_select);
+				folderFile.browseForOpen("Please select executable file",filters );
+			}
+			private function exe_select(evt:Event):void {
+				photoPath.text=folderFile.nativePath;
+				prefs.photoPath=folderFile.nativePath;
+				prefs.writeXMLData();
+				
+			}
+			private function watch_select(evt:Event):void {
+				folderWatchDir.text=folderFile.nativePath;
+				prefs.watchFolder=folderFile.nativePath;
+				prefs.writeXMLData();
+				
+				setFileMonitor(folderFile.nativePath);
+				
+			}
+			
+			private function push_select(evt:Event):void {
+				pushFolderT.text=pushFolder.nativePath;
+				prefs.pushFolder=pushFolder.nativePath;
+				prefs.writeXMLData();
+			}
+			
+			protected function deleteDir(dir:File) {
+				var currentFile:File;
+				var result:Array=dir.getDirectoryListing();
+				for (var i:int=0;i<result.length;i++) {
+					currentFile=File.applicationDirectory.resolvePath(dir.nativePath+File.separator+currentFile);
+					writeLog("now trying to delete"+currentFile.nativePath);
+					try {
+						currentFile.deleteFile();
+					} catch (e:Error) {
+						writeLog("error deleting "+currentFile.nativePath);
+					}
+				}
+			}
+			
+			
+			protected function launchEditor():void {
+				//cameraWatch.stopWatch();
+				photoShopWatch.startWatch();
+				writeLog("start watching PHOTOSHOP dir");
+				try {
+					clientSocket.writeObject({message:"blank",file:""});
+					clientSocket.flush();
+				} catch (e:Error) {
+					writeLog("error sending data "+e.message);
+				}
+				var photo:File=File.applicationDirectory.resolvePath(prefs.watchFolder+"\\captures\\"+currentPhoto);
+				writeLog("reading from "+photo.nativePath);
+				writeLog("copy to:"+File.applicationDirectory.resolvePath(prefs.watchFolder+"\\tmp\\"+currentPhoto).nativePath);
+				try {
+					photo.copyTo(File.applicationDirectory.resolvePath(prefs.watchFolder+"\\tmp\\"+currentPhoto),true);
+				} catch (e:Error) {
+					writeLog(e.message+"Error copying to destination folder");
+				}
+				
+				prefsFile=File.documentsDirectory.resolvePath(prefs.watchFolder+"\\settings\\urn.jsx");
+				if(prefsFile.exists) {
+					writeLog("prefs file exists");
+				} else {
+					writeLog("no prefs file");
+				}
+				var stream:FileStream=new FileStream();
+				stream.open(prefsFile,FileMode.WRITE);
+				stream.writeUTFBytes("var URN=\""+currentPhoto+"\""+"\r\n");
+				stream.writeUTFBytes("var bkgImg=\""+currentBckg+"\""+"\r\n");
+				stream.close();
+				var file:File=File.applicationDirectory.resolvePath(prefs.photoPath);
+				var nativeProcessInfo:NativeProcessStartupInfo=new NativeProcessStartupInfo();
+				nativeProcessInfo.executable=file;
+				nativeProcessInfo.arguments=new <String>[prefs.watchFolder+"\\settings\\wrapup.jsx"];
+				
+				var process:NativeProcess=new NativeProcess();
+				process.start(nativeProcessInfo);
+			}
+			
+			protected function reLaunchEditor():void {
+				
+				
+				writeLog("relaunch editor");
+				try {
+					clientSocket.writeObject({message:"blank",file:""});
+					clientSocket.flush();
+				} catch (e:Error) {
+					writeLog("error sending data "+e.message);
+				}
+				
+				var prevPhoto:File=File.applicationDirectory.resolvePath("C:\\xampp\\htdocs\\captures\\"+currentPhoto);
+				currentPhoto=makeRandomFile(currentPhoto);
+				prevPhoto.copyTo(File.applicationDirectory.resolvePath(prefs.watchFolder+"\\tmp\\"+currentPhoto),true);
+				
+				prefsFile=File.documentsDirectory.resolvePath(prefs.watchFolder+"\\settings\\urn.jsx");
+				if(prefsFile.exists) {
+					writeLog("prefs file exists");
+				} else {
+					writeLog("no prefs file");
+				}
+				writeLog("start watching PHOTOSHOP dir");
+				photoShopWatch.setWatchFile(prefs.watchFolder+File.separator+"output"+File.separator+currentPhoto);
+				photoShopWatch.startWatch();
+				
+				var stream:FileStream=new FileStream();
+				stream.open(prefsFile,FileMode.WRITE);
+				stream.writeUTFBytes("var URN=\""+currentPhoto+"\""+"\r\n");
+				stream.writeUTFBytes("var bkgImg=\""+currentBckg+"\""+"\r\n");
+				stream.close();
+				var file:File=File.applicationDirectory.resolvePath(prefs.photoPath);
+				var nativeProcessInfo:NativeProcessStartupInfo=new NativeProcessStartupInfo();
+				nativeProcessInfo.executable=file;
+				nativeProcessInfo.arguments=new <String>[prefs.watchFolder+"\\settings\\wrapup.jsx"];
+				
+				var process:NativeProcess=new NativeProcess();
+				process.start(nativeProcessInfo);
+			}
+			
+			protected function makeRandomFile(source:String,strlen:Number=5):String {
+				var chars:String = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+				var num_chars:Number = chars.length - 1;
+				var randomChar:String = "";
+				var _fileExt:String = source.substr(source.lastIndexOf(".")+1,source.length);
+				var _baseName:String=source.substr(0,source.lastIndexOf("."));
+				for (var i:Number = 0; i < strlen; i++){
+					randomChar += chars.charAt(Math.floor(Math.random() * num_chars));
+				}
+				var finalFile:String=_baseName+"_"+randomChar+"."+_fileExt;
+				writeLog("original: "+source+" SCRAMBLED:"+finalFile);
+				return finalFile;
+			}
+			
+			protected function previewImage_completeHandler(event:Event):void
+			{
+				trace("preview image complete!!!");
+				previewImage.width=640;
+				previewImage.height=480;
+				
+			}
+			
+			
+			// serversocket shit
+			
+			private function connect(event:MouseEvent=null):void {
+				var success:Boolean=true;
+				if(serverSocket!=null) {
+					writeLog("attempting close socket");
+					try {
+						serverSocket.close();
+					} catch (e:Error) {
+						writeLog("error clising socket:"+e.message);
+					}
+				} else {
+					writeLog("serversocket not connected");
+				}
+				serverSocket = new ServerSocket();
+				serverSocket.addEventListener(Event.CLOSE,onClose);
+				serverSocket.addEventListener(ServerSocketConnectEvent.CONNECT, onConnect);
+				serverSocket.addEventListener(IOErrorEvent.IO_ERROR,handleError);
+				writeLog("attempting bind server");
+				try {
+					serverSocket.bind(prefs.serverPort);
+					serverSocket.listen();
+				} catch (err:IOError) {
+					success=false;
+					writeLog("error starting serverSocket id:"+err.errorID);
+					writeLog("error starting serverSocket message:"+err.message);
+				}
+				if(!success) {
+					try {
+						serverSocket.close();
+					} catch (err:Error) {
+						writeLog("Second attempt closing serversocket failed:"+err.message);
+					}
+				}
+			}
+			private function onClose(e:Event) {
+				writeLog("ServerSocket closed:"+e.toString());
+				closeServerListeners();
+				
+			}
+			private function closeServerListeners():void {
+				trace("closing server listeners...");
+				if(serverSocket.hasEventListener(IOErrorEvent.IO_ERROR)) {
+					serverSocket.removeEventListener(IOErrorEvent.IO_ERROR,handleError);
+				}
+				if(serverSocket.hasEventListener(ServerSocketConnectEvent.CONNECT)) {
+					serverSocket.removeEventListener(ServerSocketConnectEvent.CONNECT, onConnect);
+				}
+				if(serverSocket.hasEventListener(Event.CLOSE)) {
+					serverSocket.removeEventListener(Event.CLOSE,onClose);
+				}
+				
+				
+				
+			}
+			private function handleError(e:IOErrorEvent) {
+				writeLog("Io Error:"+e.text);
+			}
+			private function onConnect(e:ServerSocketConnectEvent):void {
+				writeLog("Client is connected");
+				
+				clientSocket = e.socket;
+				writeLog("remote socket ip: "+clientSocket.remoteAddress.toString());
+				clientSocket.addEventListener(ProgressEvent.SOCKET_DATA, onData);
+				clientSocket.addEventListener(Event.CLOSE, onConnectionClosed);
+				clientSocket.addEventListener(IOErrorEvent.IO_ERROR,handleError);
+			}
+			
+			
+			private function onConnectionClosed(e:Event):void {
+				writeLog("Client Socket is Closed");
+				closeClientListeners();
+			}
+			
+			private function closeClientListeners():void {
+				trace("closing client socket listeners");
+				if(clientSocket.hasEventListener(ProgressEvent.SOCKET_DATA)) {
+					clientSocket.removeEventListener(ProgressEvent.SOCKET_DATA, onData);
+				}
+				if(clientSocket.hasEventListener(Event.CLOSE)) {
+					clientSocket.removeEventListener(Event.CLOSE, onConnectionClosed);
+				}
+				if(clientSocket.hasEventListener(IOErrorEvent.IO_ERROR)) {
+					clientSocket.removeEventListener(IOErrorEvent.IO_ERROR,handleError);
+				}
+				
+			}
+			
+			private function onData(e:ProgressEvent):void {
+				var msg:Object = clientSocket.readObject();
+				var s:String=msg.message;
+				var file:String=msg.file;
+				var photo:String=msg.photo;
+				writeLog("received message:"+s+" file:"+file+" photo:"+photo);
+				if(s!=null) {
+					if(s.indexOf("_blank")!=-1) {
+						writeLog("starting from scratch!");
+						tidyUp();
+						currentBckg=file;
+						//cameraWatch.startWatch();
+						//photoShopWatch.stopWatch();
+					} else if(s.indexOf("setbackground")!=-1) {
+						currentBckg=file;
+						//cameraWatch.startWatch();
+						
+						if(photo!=null) {
+							currentPhoto=photo;
+							reLaunchEditor();
+						}
+					} else if(s.indexOf("remake")!=-1) {
+						trace("current background:"+s);
+						currentPhoto=file;
+						reLaunchEditor();
+					} else if(s.indexOf("tidyup")!=-1) {
+						writeLog("Tidy Up");
+						//cameraWatch.stopWatch();
+						//photoShopWatch.stopWatch();
+						tidyUp();
+					} else if(s.indexOf("push")!=-1) {
+						writeLog("pushing image");
+						//cameraWatch.stopWatch();
+						//photoShopWatch.stopWatch();
+						var pushPhoto:File=File.documentsDirectory.resolvePath("C:\\xampp\\htdocs\\skyphotos\\"+currentPhoto);
+						var finalDest:File=File.documentsDirectory.resolvePath("gino");
+						if(!finalDest.isDirectory) {
+							writeLog("directory non exists");
+							try {
+								finalDest.createDirectory();
+							} catch (e:Error) {
+								writeLog("error creating final destination:"+e.message);
+							}
+						} else {
+							writeLog("destination directory exists");
+						}
+						finalDest=File.documentsDirectory.resolvePath(pushFolderT.text+"\\"+currentPhoto);
+						writeLog("copy from:"+pushPhoto.nativePath);
+						writeLog("copy to:"+finalDest.nativePath);
+						pushPhoto.addEventListener(Event.COMPLETE,onPushedOk);
+						pushPhoto.addEventListener(SecurityErrorEvent.SECURITY_ERROR,onSecError);
+						pushPhoto.addEventListener(IOErrorEvent.IO_ERROR,onIOError);
+						pushPhoto.copyToAsync(finalDest,true);
+						
+						
+					}
+				} else {
+					writeLog("Received null message");
+				}
+			}
+			protected function onSecError(e:SecurityErrorEvent) {
+				showAlert("secyrity Error\r\n" +e.text);
+				
+			}
+			protected function onIOError(e:IOErrorEvent) {
+				showAlert("IOError Error\r\n" +e.text);
+				
+			}
+			protected function onPushedOk(e:Event) {
+				showAlert("FILE PUSHED TO PHOTO CREATIONS");
+				clientSocket.writeObject({message:"pushcomplete",file:""});
+				clientSocket.flush();
+			}
+			
+			
+			protected function tidyUp():void {
+				
+				
+				
+				var file:File=File.applicationDirectory.resolvePath("C:\\Windows\\System32\\cmd.exe");
+				writeLog("tidy up launching "+file.nativePath);
+				CMDnativeProcessInfo=new NativeProcessStartupInfo();
+				CMDnativeProcessInfo.executable=file;
+				CMDnativeProcessInfo.arguments=new <String>[prefs.watchFolder+"\\tidyup.bat"];
+				CMDprocess=new NativeProcess();
+				CMDprocess.start(CMDnativeProcessInfo);
+				CMDprocess.addEventListener(ProgressEvent.STANDARD_OUTPUT_DATA, checkProcess);
+				
+				
+				
+				
+			}
+			private function checkProcess(e:ProgressEvent) {
+				writeLog("progress event on tidyup"+e.bytesLoaded+" of "+e.bytesTotal);
+				
+			}
+			
+			
+			private function sendMessage(event:MouseEvent):void{
+				try {
+					clientSocket.writeObject({message:"Hello Client",file:""});
+					clientSocket.flush();
+				} catch (e:Error) {
+					writeLog("error sending data "+e.message);
+				}
+			}
+			
+			private function writeLog(stringa:String):void {
+				
+				output.appendText(stringa+"\r\n");
+			}
+			
+			protected function changePortBut_clickHandler(event:MouseEvent):void
+			{
+				prefs.serverPort=parseInt(listeningPort.text);
+				prefs.writeXMLData();
+				connect();
+			}
+			
+			protected function windowedapplication1_applicationCompleteHandler(event:FlexEvent):void
+			{
+				
+				//loaderInfo.uncaughtErrorEvents.addEventListener(UncaughtErrorEvent.UNCAUGHT_ERROR, errorHandler);
+				
+				//loaderInfo.uncaughtErrorEvents.addEventListener(UncaughtErrorEvent.UNCAUGHT_ERROR, );
+				
+			}
+			
+			
+			protected function errorHandler(e:UncaughtErrorEvent):void
+			{
+				e.preventDefault();
+				writeLog("An error has occurred and been caught by the global error handler: " + e.error.toString());
+			}
+			private function uncaughtErrorHandler(event:UncaughtErrorEvent):void
+			{
+				event.preventDefault();
+				if (event.error is Error)
+				{
+					var error:Error = event.error as Error;
+					writeLog("uncaught error:"+error.message);
+				}
+				else if (event.error is ErrorEvent)
+				{
+					var errorEvent:ErrorEvent = event.error as ErrorEvent;
+					writeLog("uncaught errorEvent:"+errorEvent.text);
+				}
+				else
+				{
+					// a non-Error, non-ErrorEvent type was thrown and uncaught
+					writeLog("a non-Error, non-ErrorEvent type was thrown and uncaught:"+event.text);
+				}
+			}
+			
+			protected function windowedapplication1_closingHandler(event:Event):void
+			{
+				trace("while closing app!");
+				if(serverSocket!=null) {
+					trace("attempting close socket");
+					try {
+						serverSocket.close();
+						trace("socket closed properly!");
+					} catch (e:Error) {
+						writeLog("error clising socket:"+e.message);
+					} finally {
+						trace("i am into finally");
+					}
+				} else {
+					
+					trace("serversocket is null");
+				}
+			}
+			
+			protected function button1_clickHandler(event:MouseEvent):void
+			{
+				output.text="";
+				
+			}
+			
+			protected function changePushFolder_clickHandler(event:MouseEvent):void
+			{
+				prefs.pushFolder=pushFolderT.text;
+				prefs.writeXMLData();
+				
+			}
+			
+			protected function windowedapplication1_creationCompleteHandler(event:FlexEvent):void
+			{
+				trace("Main screen:"+ Screen.mainScreen.visibleBounds.left+" "+Screen.mainScreen.visibleBounds.top);
+				var secondscreen:Number=0;
+				for(var i:Number=0;i<Screen.screens.length;i++) {
+					trace(i+" screen:"+Screen.screens[i].visibleBounds.left+" "+Screen.screens[i].visibleBounds.top);
+					if(Screen.screens[i].visibleBounds.left != Screen.mainScreen.visibleBounds.left) {
+						secondscreen=i;
+					}
+				}
+				trace("secondary screen is:"+secondscreen);
+				cameraWindow=new CameraWindow();
+				cameraWindow.open();
+				cameraWindow.move(Screen.screens[secondscreen].visibleBounds.left,Screen.screens[secondscreen].visibleBounds.top);
+				cameraWindow.width=Screen.screens[secondscreen].visibleBounds.width;
+				cameraWindow.height=Screen.screens[secondscreen].visibleBounds.height;
+				
+			}
+			
+			
+			
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<s:VGroup width="100%" height="100%">
+		<s:HGroup>
+			<s:Image id="previewImage" width="640" height="480" scaleMode="zoom" complete="previewImage_completeHandler(event)" />
+			<s:VGroup>
+				
+				
+				<s:TextArea width="500" height="450" id="output" />
+				<s:Button label="Clear Log" click="button1_clickHandler(event)" />
+			</s:VGroup>
+		</s:HGroup>
+		
+		<s:HGroup>
+			<s:Label text="PhotoShop path" width="200" />
+			<s:TextInput width="500" id="photoPath" />
+			<s:Button id="changePhotoBut" label="change" click="selectEXE(event)" />
+		</s:HGroup>
+		<s:HGroup>
+			<s:Label text="Watch folder" width="200" />
+			<s:TextInput width="500" id="folderWatchDir" />
+			<s:Button id="changeFolderBut" label="change" click="selectWatch(event)" />
+		</s:HGroup>
+		<s:HGroup>
+			<s:Label text="HP Software Folder" width="200" />
+			<s:TextInput width="500" id="pushFolderT" />
+			<s:Button id="changePushFolder" label="change" click="selectPush(event)" />
+		</s:HGroup>
+		<s:HGroup>
+			<s:Label text="ServerSocket Port" width="200" />
+			<s:TextInput width="500" id="listeningPort" />
+			<s:Button id="changePortBut" label="change" click="changePortBut_clickHandler(event)" />
+		</s:HGroup>
+		
+		
+		
+	</s:VGroup>
+</s:WindowedApplication>
