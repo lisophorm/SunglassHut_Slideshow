@@ -4,49 +4,93 @@
 		  xmlns:s="library://ns.adobe.com/flex/spark"
 		  xmlns:mx="library://ns.adobe.com/flex/mx" 
 		  width="100%" height="100%" showStatusBar="false" systemChrome="none"
-		  transparent="false" xmlns:components="views.components.*" backgroundColor="#ffffff">
+		  transparent="false" xmlns:components="views.components.*" backgroundColor="#ffffff" creationComplete="window1_creationCompleteHandler(event)" >
 	<fx:Script>
 		<![CDATA[
-			//import com.greensock.TweenLite;
+			import com.greensock.TweenLite;
+			import com.greensock.TweenMax;
+			import com.greensock.plugins.AutoAlphaPlugin;
+			import com.greensock.plugins.TweenPlugin;
 			
 			import mx.events.FlexEvent;
-			import mx.events.VideoEvent;
-			
-			import spark.effects.Animate;
-			
-			import org.osmf.events.MediaPlayerStateChangeEvent;
 			public var temporizza:Timer;
 			
 			private var photoNumber:Number=0;
 			
+			private var faseStatus:String="one";
+			
 			public function showNewPic(source:String):void {
 
+				temporizza=new Timer(10);
+				temporizza.addEventListener(TimerEvent.TIMER,makeFade);
 				
 				photoNumber++;
 				if(photoNumber % 2 == 0) {
+					image1.alpha=1;
+					image2.alpha=0;
+					image1.addEventListener(Event.COMPLETE,image1_completeHandler);
 					image1.source=source;
+					trace("filling image 1:"+image1.source);
 				} else {
+					image2.alpha=1;
+					image1.alpha=0;
+					image1.addEventListener(Event.COMPLETE,image2_completeHandler);
 					image2.source=source;
+					trace("filling image 2"+image2.source);
 				}
 			}
 			
-			
+			protected function makeFade(e:TimerEvent) {
+				trace("makefade"+image1.alpha+" "+image2.alpha);
+				if (faseStatus=="one") {
+					image1.alpha+=0.025;
+					image2.alpha-=0.025;
+					if(image1.alpha>1) {
+						image1.alpha=1;
+						image2.alpha=0;
+						temporizza.stop();
+					}
+				} else {
+					image1.alpha-=0.025;
+					image2.alpha+=0.025;
+					if(image2.alpha>1) {
+						image2.alpha=1;
+						image1.alpha=0;
+						temporizza.stop();
+					}
+				}
+				
+			}
 			
 			protected function image1_completeHandler(event:Event):void
 			{
 				trace("image 1 complete handler");
-				image1.visible=true;
-				image2.visible=false;
+				///TweenMax.to(image1,1,{alpha:1,onComplete:tween1Complete});
+				//TweenMax.to(image2,1,{alpha:0,onComplete:tween2Complete});
+
+				//image1.visible=true;
+				//image2.visible=false;
+				faseStatus="one";
+				temporizza.start();
 			}
 			
 			protected function image2_completeHandler(event:Event):void
 			{
 				trace("image 2 complete handler");
-				image2.visible=true;
-				image1.visible=false;
+				//TweenMax.to(image1,1,{alpha:0,onComplete:tween1Complete});
+				//TweenMax.to(image2,1,{alpha:1,onComplete:tween2Complete});
+				faseStatus="two";
+				temporizza.start();
 				
 			}
-			
+			function tween1Complete():void {
+				trace("tween 1 complete");
+				image1.visible=true;
+			}
+			function tween2Complete():void {
+				trace("tween 2 complete");
+				image2.visible=true;
+			}
 			protected function image1_readyHandler(event:FlexEvent):void
 			{
 				trace("image 1 ready handler");
@@ -60,8 +104,22 @@
 				
 			}
 			
+			protected function window1_creationCompleteHandler(event:FlexEvent):void
+			{
+				TweenPlugin.activate([AutoAlphaPlugin]);
+				
+			}
+			
 		]]>
 	</fx:Script>
+	<fx:Declarations>
+		<s:Fade id="image1In" alphaFrom="0" alphaTo="1" duration="1000" target="{image1}"  />
+		<s:Fade id="image1Out" alphaFrom="1" alphaTo="0" duration="1000" target="{image1}" />
+		<s:Fade id="image2In" alphaFrom="0" alphaTo="1" duration="1000" target="{image2}" />
+		<s:Fade id="image2Out" alphaFrom="1" alphaTo="1" duration="1000" target="{image2}" />
+			
+
+	</fx:Declarations>
 	<!--s:states>
 	<s:State name="video"  />
 	<s:State name="photo"/>
@@ -89,8 +147,8 @@
 	
 	<s:BorderContainer width="100%" height="100%" borderVisible="false" >
 		
-		<s:Image id="image1" width="100%" height="100%" smooth="true" scaleMode="letterbox" ready="image1_readyHandler(event)" complete="image1_completeHandler(event)" />
-		<s:Image id="image2" width="100%" height="100%" smooth="true" scaleMode="letterbox" ready="image2_readyHandler(event)" complete="image2_completeHandler(event)" />
+		<s:Image id="image1" alpha="0" width="100%" height="100%" smooth="true" scaleMode="letterbox" ready="image1_readyHandler(event)"  />
+		<s:Image id="image2" alpha="0" width="100%" height="100%" smooth="true" scaleMode="letterbox" ready="image2_readyHandler(event)"  />
 
 	</s:BorderContainer>
 	

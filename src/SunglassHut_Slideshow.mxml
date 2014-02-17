@@ -99,7 +99,7 @@
 				trace("new dire length:"+currentDirContents.length);
 				for (i = 0; i < currentDirContents.length; i++) {
 					//&& currentDirContents[i].indexOf(".jpg")!=-1
-					if (oldDirContents.indexOf(currentDirContents[i]) == -1 && currentDirContents[i].indexOf(".jpg")!=-1) {
+					if (oldDirContents.indexOf(currentDirContents[i]) == -1 && (currentDirContents[i].toLowerCase().indexOf(".jpg"))!=-1) {
 						trace("found new:"+currentDirContents[i]);
 						newFiles.push(currentDirContents[i]);
 					}
@@ -108,6 +108,7 @@
 				if(newFiles.length>0) {
 					new DelayedExecution(3000,this,procopio);
 				}
+				oldDirContents=currentDirContents.slice();
 			}
 			
 			private function onFileMove(e:FileMonitorEvent):void
